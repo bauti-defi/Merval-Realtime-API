@@ -1,10 +1,10 @@
 FROM python:3.8-slim
 
-WORKDIR /usr/src/merval
+WORKDIR /usr/app/merval/server/
 
 RUN pip install fastapi uvicorn pyhomebroker 
 
-COPY . ./
+COPY . .
 
 EXPOSE 8000
 
