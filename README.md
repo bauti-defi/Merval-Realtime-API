@@ -6,12 +6,14 @@ Simple RESTful server for realtime merval data.
 
 Include config.json file that has the following format:
 
+```
 {
 "dni": "XXXXXXX",
 "user": "XXXXXXXx",
 "password": "XXXXXXX",
 "broker_id": 12
 }
+```
 
 Refer to https://github.com/crapher/pyhomebroker for broker_id and other setup information.
 
