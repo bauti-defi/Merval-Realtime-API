@@ -20,6 +20,8 @@
 #
 
 
+import json
+
 import pandas as pd
 from pyhomebroker import HomeBroker
 
@@ -118,7 +120,7 @@ def get_merval_data(ticker):
         result = government_bonds.loc[(ticker, '48hs')]
     elif options_df.index.isin([ticker]).any():
         result = options_df.loc[ticker]
-    return result.to_json(orient='columns').replace('"', '') if result is not None else result
+    return json.loads(result.to_json()) if result is not None else None
 
 
 hb = HomeBroker(appSettings.config['broker_id'],

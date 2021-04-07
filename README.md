@@ -23,6 +23,6 @@ docker build -t merval-server .
 
 ## Run with docker
 
-docker run -d --name merval-realime-api -p 8000:8000 merval-server
+docker run -d --name merval-realtime-api -p 8000:8000 merval-server
 
 ## Visit 127.0.0.1:8000/docs to try it out!
