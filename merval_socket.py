@@ -20,112 +20,100 @@
 #
 
 
-import json
+from threading import Lock, Thread
 
 import pandas as pd
 from pyhomebroker import HomeBroker
 
-from appSettings import AppSettings
 
-appSettings = AppSettings()
+class MervalSocket():
 
-government_bonds = pd.DataFrame()
-cedears = pd.DataFrame()
-general_board = pd.DataFrame()
-bluechips = pd.DataFrame()
-options_df = pd.DataFrame()
+    __autoreconnect = True
+    __connect_thread = None
+    __connect_thread_lock = None
 
+    def __init__(self, merval_data, config):
+        self.merval_data = merval_data
+        self.config = config
 
-def start():
-    hb.auth.login(dni=appSettings.config['dni'], user=appSettings.config['user'],
-                  password=appSettings.config['password'], raise_exception=True)
+        self.__create_server()
 
-    hb.online.connect()
+    def __create_server(self):
+        self.hb = HomeBroker(self.config['broker_id'],
+                             on_open=self.on_open,
+                             on_securities=self.merval_data.on_securities,
+                             on_options=self.merval_data.on_options,
+                             on_error=self.on_error,
+                             on_close=self.on_close)
 
-    hb.online.subscribe_securities('bluechips', '48hs')
-    hb.online.subscribe_securities('general_board', '48hs')
-    hb.online.subscribe_securities('cedears', '48hs')
-    hb.online.subscribe_securities('government_bonds', '48hs')
+    def start(self):
+        self.__connect_thread_lock = Lock()
+        self.__connect_thread = Thread(target=self.__connect)
+        self.__connect_thread.start()
 
-    hb.online.subscribe_options()
+    def __connect(self):
+        with self.__connect_thread_lock:
+            self.__autoreconnect = False
 
+            try:
+                print("Login to server.")
 
-def stop():
-    hb.online.unsubscribe_options()
+                self.hb.auth.login(
+                    dni=self.config.dni,
+                    user=self.config.user,
+                    password=self.config.password,
+                    raise_exception=True
+                )
 
-    hb.online.unsubscribe_securities('bluechips', '48hs')
-    hb.online.unsubscribe_securities('general_board', '48hs')
-    hb.online.unsubscribe_securities('cedears', '48hs')
-    hb.online.unsubscribe_securities('government_bonds', '48hs')
-    hb.online.unsubscribe_securities('corporate_bonds', '48hs')
+                print("Logged in to server.")
+            except Exception as ex:
+                print("Login failed.")
+                return
 
-    hb.online.disconnect()
+            self.__autoreconnect = True
 
+            print("Connecting to socket...")
 
-def on_open(online):
-    print('=================== CONNECTION OPENED ====================')
+            while self.__autoreconnect:
+                try:
+                    self.hb.online.connect()
 
+                    print("Connected to socket.")
+                    break
+                except Exception as ex:
+                    print("Error connecting to socket.")
 
-def on_securities(online, quotes):
-    global government_bonds, cedears, bluechips, general_board
-    if (quotes['group'] == 'bluechips').all():
-        if bluechips.empty:
-            bluechips = quotes.copy()
-        else:
-            bluechips.update(quotes)
-    elif (quotes['group'] == 'general_board').all():
-        if general_board.empty:
-            general_board = quotes.copy()
-        else:
-            general_board.update(quotes)
-    elif (quotes['group'] == 'cedears').all():
-        if cedears.empty:
-            cedears = quotes.copy()
-        else:
-            cedears.update(quotes)
-    elif (quotes['group'] == 'government_bonds').all():
-        if government_bonds.empty:
-            government_bonds = quotes.copy()
-        else:
-            government_bonds.update(quotes)
+    def on_open(self, connection):
+        print('=================== CONNECTION OPENED ====================')
 
+        self.hb.online.subscribe_securities('bluechips', '48hs')
+        self.hb.online.subscribe_securities('general_board', '48hs')
+        self.hb.online.subscribe_securities('cedears', '48hs')
+        self.hb.online.subscribe_securities('government_bonds', '48hs')
 
-def on_options(online, quotes):
-    global options_df
-    if options_df.empty:
-        options_df = quotes.copy()
-    else:
-        options_df.update(quotes)
+        self.hb.online.subscribe_options()
 
+        print("Subscribed to assets.")
 
-def on_error(online, exception, connection_lost):
-    print('@@@@@@@@@@@@@@@@@@@@@@@@@ Error @@@@@@@@@@@@@@@@@@@@@@@@@@')
-    print(exception)
+    def on_error(self, connection, exception, connection_lost):
+        print("Detected connection error.")
+        if connection_lost:
+            print("Detected connection lost: %s" % exception)
+            self.on_close(connection)
 
+    def on_close(self, connection):
+        print('=================== CONNECTION CLOSED ====================')
 
-def on_close(online):
-    print('=================== CONNECTION CLOSED ====================')
+        if self.__autoreconnect:
+            print("Reconnecting due to connection loss...")
+            self.__create_server()
 
+            self.start()
 
-def get_merval_data(ticker):
-    global options_df, general_board, bluechips, cedears, government_bonds
-    result = None
-    if general_board.index.isin([(ticker, '48hs')]).any():
-        result = general_board.loc[(ticker, '48hs')]
-    elif bluechips.index.isin([(ticker, '48hs')]).any():
-        result = bluechips.loc[(ticker, '48hs')]
-    elif cedears.index.isin([(ticker, '48hs')]).any():
-        result = cedears.loc[(ticker, '48hs')]
-    elif government_bonds.index.isin([(ticker, '48hs')]).any():
-        result = government_bonds.loc[(ticker, '48hs')]
-    elif options_df.index.isin([ticker]).any():
-        result = options_df.loc[ticker]
-    return json.loads(result.to_json()) if result is not None else None
+    def stop(self):
+        print("Disconnecting from server")
 
+        self.__autoreconnect = False
 
-hb = HomeBroker(appSettings.config['broker_id'],
-                on_open=on_open,
-                on_securities=on_securities,
-                on_options=on_options,
-                on_error=on_error,
-                on_close=on_close)
+        if self.hb.online.is_connected():
+            self.hb.online.disconnect()
