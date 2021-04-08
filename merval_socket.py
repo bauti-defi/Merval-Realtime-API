@@ -59,9 +59,9 @@ class MervalSocket():
                 print("Login to server.")
 
                 self.hb.auth.login(
-                    dni=self.config.dni,
-                    user=self.config.user,
-                    password=self.config.password,
+                    dni=self.config['dni'],
+                    user=self.config['user'],
+                    password=self.config['password'],
                     raise_exception=True
                 )
 
